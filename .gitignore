@@ -1,0 +1,28 @@
+# Vim swap files
+*.swp
+*.swo
+
+# Go Binaries for programs and plugins
+morag
+*.o
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, build with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+
+# Fresh
+runner.conf
+
+# Folders
+tmp/
+
+# Envs
+*.env
+*.envrc
