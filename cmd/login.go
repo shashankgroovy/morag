@@ -2,9 +2,14 @@ package cmd
 
 import (
 	"fmt"
+	"net/http"
+	"os"
 	"os/exec"
 	"runtime"
+	"time"
 
+	"github.com/fatih/color"
+	"github.com/shashankgroovy/morag/server"
 	"github.com/spf13/cobra"
 )
 
@@ -22,15 +27,51 @@ Simply issue: "morag login" to initiate the authentication process.`,
 
 func init() {
 	rootCmd.AddCommand(loginCmd)
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// loginCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }
 
+// loginFunc helps authenticate a user by spawning a small server and
+// redirecting the user for login process on the browser.
 func loginFunc(cmd *cobra.Command, args []string) {
-	fmt.Println("Login called")
-	open("http://www.google.com")
+
+	// Initialize a simple server
+	srv := server.App{}
+	srv.Initialize()
+
+	// Create a goroutine that will open the default browser for authentication
+	// as soon as the server is up and running.
+	go func() {
+		base_uri := fmt.Sprintf("http://localhost:%s", os.Getenv("PORT"))
+		auth_uri := base_uri + "/auth"
+
+		for {
+			time.Sleep(time.Second)
+
+			fmt.Println("You will be shortly redirected to your default browser...")
+			resp, err := http.Get(base_uri)
+			if err != nil {
+				fmt.Println("Failed:", err)
+				continue
+			}
+			resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				fmt.Println("Not OK:", resp.StatusCode)
+				continue
+			}
+
+			// Reached this point: server is up and running!
+			break
+		}
+		fmt.Printf("If the browser doesn't open automatically then simply use the following URL:\n\n")
+		color.Green(auth_uri)
+
+		// Open the URL in default browser for authentication
+		open(auth_uri)
+		time.Sleep(5 * time.Second)
+		srv.Shutdown()
+	}()
+
+	// run the server
+	srv.Run(os.Getenv("PORT"))
 }
 
 // Opens url in the default browser
