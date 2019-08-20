@@ -33,9 +33,12 @@ func init() {
 // redirecting the user for login process on the browser.
 func loginFunc(cmd *cobra.Command, args []string) {
 
+	// Make a channel to communicate with handlers
+	srv_chan := make(chan bool, 1)
+
 	// Initialize a simple server
 	srv := server.App{}
-	srv.Initialize()
+	srv.Initialize(srv_chan)
 
 	// Create a goroutine that will open the default browser for authentication
 	// as soon as the server is up and running.
@@ -66,8 +69,12 @@ func loginFunc(cmd *cobra.Command, args []string) {
 
 		// Open the URL in default browser for authentication
 		open(auth_uri)
-		time.Sleep(5 * time.Second)
+
+		// Wait for a signal to close the server
+		<-srv_chan
 		srv.Shutdown()
+		color.Yellow("\nSuccessfully authenticated!")
+		fmt.Println("You can now use the `fetch` command to get tracks from Spotify")
 	}()
 
 	// run the server

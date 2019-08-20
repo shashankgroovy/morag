@@ -3,9 +3,11 @@ module github.com/shashankgroovy/morag
 go 1.12
 
 require (
+	github.com/aws/aws-sdk-go v1.23.4 // indirect
 	github.com/bitly/go-simplejson v0.5.0 // indirect
 	github.com/bugsnag/bugsnag-go v1.5.3 // indirect
 	github.com/bugsnag/panicwrap v1.2.0 // indirect
+	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
 	github.com/fatih/color v1.7.0
 	github.com/getlantern/golog v0.0.0-20190809085441-26e09e6dd330 // indirect
 	github.com/getlantern/systray v0.0.0-20190727060347-6f0e5a3c556c // indirect

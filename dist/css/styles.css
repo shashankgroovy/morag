@@ -1,0 +1,12 @@
+html, body {
+    background: #0D0208;
+    color: #00FF41;
+    font-family: monospace;
+    width: 70%;
+    margin: auto;
+}
+
+pre {
+    margin: 10rem auto 2rem;
+}
+

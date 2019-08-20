@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Morag</title>
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="keywords" content="Morag - A command line tool in Go"/>
+    <meta name="description" content="Morag let's you fetch an artist's entire library/catalogue from Spotify">
+    <meta name="theme-color" content="#222222" />
+
+    <link rel="icon" type="image/png" sizes="32x32" href="/dist/static/images/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/dist/static/images/favicon-16x16.png">
+    <link rel="stylesheet" href="/dist/css/styles.css">
+</head>
+<body>
+    <div>
+        <pre>
+    __  _______  ____  ___   ______
+   /  |/  / __ \/ __ \/   | / ____/
+  / /|_/ / / / / /_/ / /| |/ / __  
+ / /  / / /_/ / _, _/ ___ / /_/ /  
+/_/  /_/\____/_/ |_/_/  |_\____/
+        </pre>
+
+        <p>Connecting to Spotify ...</p>
+    </div>
+   <script>
+       (function () {
+           let client_id = {{.ClientId}};
+           let scopes = {{.Scopes}};
+           let redirect_uri = {{.RedirectURI}};
+
+           let spotify_auth_uri = "https://accounts.spotify.com/authorize" +
+               "?response_type=code" +
+               "&client_id=" + client_id +
+               (scopes ? "&scope=" + encodeURIComponent(scopes) : "") +
+               "&redirect_uri=" + encodeURIComponent(redirect_uri);
+
+           console.log(spotify_auth_uri)
+           window.location.replace(spotify_auth_uri)
+
+       })();
+   </script>
+</body>
+</html>

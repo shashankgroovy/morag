@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 )
@@ -14,11 +15,23 @@ var logoutCmd = &cobra.Command{
 disconnect from Spotify.
 
 Simple run: "morag logout" to logout.`,
-	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("logout called")
-	},
+	Run: logout,
 }
 
 func init() {
 	rootCmd.AddCommand(logoutCmd)
+}
+
+func logout(cmd *cobra.Command, args []string) {
+	token_file := os.Getenv("TOKEN_FILE")
+
+	if _, err := os.Stat(token_file); err == nil {
+		_ = os.Remove(token_file)
+		fmt.Println("Logged out")
+
+	} else if os.IsNotExist(err) {
+		fmt.Println("Already logged out")
+
+	}
+
 }

@@ -2,8 +2,11 @@
 *.swp
 *.swo
 
-# Go Binaries for programs and plugins
+# Project files
 morag
+.morag_token.json
+
+# Go Binaries for programs and plugins
 *.o
 *.exe
 *.exe~
