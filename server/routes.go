@@ -8,7 +8,7 @@ import (
 )
 
 // configureRoutes setups up app routes and static routes
-func configureRoutes(srv_chan chan<- bool) *mux.Router {
+func configureRoutes(srvChan chan<- bool) *mux.Router {
 
 	r := mux.NewRouter().StrictSlash(true)
 	// Serve static files
@@ -21,7 +21,7 @@ func configureRoutes(srv_chan chan<- bool) *mux.Router {
 
 	// create a function closure for authCallbackHandler to work with server
 	// close channel
-	authCallbackHandlerWithChannel := authCallbackHandler(srv_chan)
+	authCallbackHandlerWithChannel := authCallbackHandler(srvChan)
 	r.HandleFunc("/auth/callback", authCallbackHandlerWithChannel).Methods(http.MethodGet, http.MethodPost, http.MethodOptions)
 
 	return r

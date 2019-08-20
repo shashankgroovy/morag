@@ -18,13 +18,13 @@ import (
 var clientId string = os.Getenv("CLIENT_ID")
 var clientSecret string = os.Getenv("CLIENT_SECRET")
 
-// For working with OAuth token
+// OAuthToken struct used for working with OAuth token
 type OAuthToken struct {
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token"`
 }
 
-// Checks if access-token has expired or not by hitting Spotify
+// ValidateAccessToken checks if access-token has expired or not by hitting Spotify
 func (token *OAuthToken) ValidateAccessToken() error {
 	client := &http.Client{}
 
@@ -33,19 +33,18 @@ func (token *OAuthToken) ValidateAccessToken() error {
 	req.Header.Add("Authorization", "Bearer "+token.AccessToken)
 
 	response, err := client.Do(req)
-	defer response.Body.Close()
-
 	// check if everything's ok
 	if err != nil || response.StatusCode != http.StatusOK {
 		body, _ := ioutil.ReadAll(response.Body)
 		log.Println("Unable to fetch new access token", err.Error(), string(body))
 		return err
 	}
+	defer response.Body.Close()
 
 	return nil
 }
 
-// Returns a new access token and also writes the new tokens in TOKEN_FILE
+// GetNewAccessToken returns a new access token and also writes the new tokens in TOKEN_FILE
 func (token *OAuthToken) GetNewAccessToken() error {
 	client := &http.Client{}
 
@@ -102,7 +101,7 @@ func (token *OAuthToken) SaveTokenToFile(r *http.Response) error {
 	return nil
 }
 
-// Opens url in the default browser
+// OpenInBrowser opens a given url in the default browser based on each platform
 func OpenInBrowser(url string) error {
 	var cmd string
 	var args []string

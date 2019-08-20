@@ -76,11 +76,11 @@ func loginFunc(cmd *cobra.Command, args []string) {
 		// Spawn a server to initiate the OAuth2 authentication process
 
 		// Initialize a channel for communication with handlers
-		srv_chan := make(chan bool, 1)
+		srvChan := make(chan bool, 1)
 
 		// Initialize a simple server
 		srv := server.App{}
-		srv.Initialize(srv_chan)
+		srv.Initialize(srvChan)
 
 		// Create a goroutine that will open the default browser for authentication
 		// as soon as the server is up and running.
@@ -113,7 +113,7 @@ func loginFunc(cmd *cobra.Command, args []string) {
 			utils.OpenInBrowser(authURL)
 
 			// Wait for a signal to close the server
-			<-srv_chan
+			<-srvChan
 			srv.Shutdown()
 			color.Yellow("\nSuccessfully authenticated!")
 			fmt.Println("Use `morag help fetch` to learn more about how to get track info from Spotify")

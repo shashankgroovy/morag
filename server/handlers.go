@@ -36,7 +36,7 @@ func authHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // controller for auth callback
-func authCallbackHandler(srv_chan chan<- bool) func(w http.ResponseWriter, r *http.Request) {
+func authCallbackHandler(srvChan chan<- bool) func(w http.ResponseWriter, r *http.Request) {
 
 	return func(w http.ResponseWriter, r *http.Request) {
 
@@ -49,10 +49,10 @@ func authCallbackHandler(srv_chan chan<- bool) func(w http.ResponseWriter, r *ht
 
 		// Get the authorization code
 		code := r.FormValue("code")
-		auth_error := r.FormValue("error")
+		authError := r.FormValue("error")
 
-		if auth_error != "" {
-			log.Println("Error occurred while communicating with Spotify. Make sure you gave the access. ", auth_error)
+		if authError != "" {
+			log.Println("Error occurred while communicating with Spotify. Make sure you gave the access. ", authError)
 		}
 
 		spotifyURL := fmt.Sprintf("https://accounts.spotify.com/api/token")
@@ -84,7 +84,7 @@ func authCallbackHandler(srv_chan chan<- bool) func(w http.ResponseWriter, r *ht
 		tmpl.Execute(w, "You have successfully logged in!")
 
 		// Send suceess to server channel to close the server
-		srv_chan <- true
+		srvChan <- true
 
 	}
 }

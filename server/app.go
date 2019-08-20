@@ -16,10 +16,10 @@ type App struct {
 }
 
 // Initialize sets up routing
-func (a *App) Initialize(srv_chan chan<- bool) {
+func (a *App) Initialize(srvChan chan<- bool) {
 
 	// Setup routes
-	a.Router = configureRoutes(srv_chan)
+	a.Router = configureRoutes(srvChan)
 }
 
 // Run starts an http.Server
