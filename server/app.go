@@ -31,7 +31,7 @@ func (a *App) Run(httpPort string) {
 		WriteTimeout: 15 * time.Second,
 		ReadTimeout:  15 * time.Second,
 	}
-	log.Fatal(a.Server.ListenAndServe())
+	a.Server.ListenAndServe()
 }
 
 // Shutdown safely closes the http.Server

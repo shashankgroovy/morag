@@ -4,16 +4,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
+
+	"github.com/shashankgroovy/morag/utils"
 )
 
 var clientId string = os.Getenv("CLIENT_ID")
 var clientSecret string = os.Getenv("CLIENT_SECRET")
-var redirectURI string = fmt.Sprintf("%s:%s/auth/callback", os.Getenv("BASE_URL"), os.Getenv("PORT"))
+var redirectURI string = fmt.Sprintf("%s:%s/auth/callback", os.Getenv("BASE_URI"), os.Getenv("PORT"))
 
 // controller for health check
 func healthCheckHandler(w http.ResponseWriter, r *http.Request) {
@@ -71,24 +72,11 @@ func authCallbackHandler(srv_chan chan<- bool) func(w http.ResponseWriter, r *ht
 
 		defer response.Body.Close()
 
-		// Parse the request body into the `oAuthResponse` struct
-		var authToken oAuthResponse
+		// Parse the request body into the `OAuthToken` struct
+		var authToken utils.OAuthToken
 
-		if err := json.NewDecoder(response.Body).Decode(&authToken); err != nil {
-			fmt.Fprintf(os.Stdout, "could not parse JSON response: %v", err)
+		if err := authToken.SaveTokenToFile(response); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
-		}
-
-		// JSONify the authToken
-		file, err := json.Marshal(authToken)
-		if err != nil {
-			log.Println("Unable to parse JSON")
-		}
-
-		// Save the access token in a file for future requests
-		err = ioutil.WriteFile(os.Getenv("TOKEN_FILE"), file, 0644)
-		if err != nil {
-			log.Println("Unable to create Token file", err)
 		}
 
 		// Render the success page
@@ -99,10 +87,4 @@ func authCallbackHandler(srv_chan chan<- bool) func(w http.ResponseWriter, r *ht
 		srv_chan <- true
 
 	}
-}
-
-// For storing OAuth response
-type oAuthResponse struct {
-	AccessToken  string `json:"access_token"`
-	RefreshToekn string `json:"refresh_token"`
 }

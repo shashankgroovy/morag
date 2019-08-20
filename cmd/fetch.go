@@ -21,14 +21,7 @@ $ morag fetch [artistID]
 EXAMPLE:
 $ morag fetch 0OdUWJ0sBjDrqHygGUXeCF
 `,
-	Run: func(cmd *cobra.Command, args []string) {
-		if len(args) < 1 {
-			fmt.Printf("ERROR: Please provide a Spotify artistID.\nSee the help text below.\n\n")
-			cmd.Help()
-
-		}
-		fmt.Println("fetch called. ", args)
-	},
+	Run: fetch,
 }
 
 func init() {
@@ -37,4 +30,13 @@ func init() {
 	// Add a local flag which will only run when this command
 	// is called directly.
 	fetchCmd.Flags().StringP("output_csv", "o", "output.csv", "Provide an output file name of your choice")
+}
+
+func fetch(cmd *cobra.Command, args []string) {
+	if len(args) < 1 {
+		fmt.Printf("ERROR: Please provide a Spotify artistID.\nSee the help text below.\n\n")
+		cmd.Help()
+
+	}
+	fmt.Println("fetch called. ", args)
 }
