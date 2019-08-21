@@ -1,10 +1,7 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
-	"io/ioutil"
-	"log"
 	"net/http"
 	"os"
 	"time"
@@ -38,40 +35,9 @@ func init() {
 // redirecting the user for login process on the browser.
 func loginFunc(cmd *cobra.Command, args []string) {
 
-	tokenFile := os.Getenv("TOKEN_FILE")
-
-	// Check if we have a tokenFile and validate access token based on it.
-	if _, err := os.Stat(tokenFile); err == nil {
-		utils.Banner()
-
-		// Token file exists
-		// Validate if the access token is valid
-		authJson, err := ioutil.ReadFile(tokenFile)
-		if err != nil {
-			log.Println("Bad json in token file", err.Error())
-			log.Println("Use the login command to authenticate again")
-		}
-
-		// we initialize our Users array
-		var authToken utils.OAuthToken
-
-		// we unmarshal our byteArray which contains our
-		// jsonFile's content into 'users' which we defined above
-		json.Unmarshal(authJson, &authToken)
-
-		// Check if access token has expired
-		err = authToken.ValidateAccessToken()
-		if err != nil {
-			// Get a new access token
-			_ = authToken.GetNewAccessToken()
-			log.Println("Access token expired. Fetching a new access token")
-			fmt.Println("You are authenticated now!")
-			fmt.Println("Use `morag help fetch` to learn more about how to get tracks")
-		} else {
-			fmt.Println("You are already authenticated!")
-			fmt.Println("Use `morag help fetch` to learn more about how to get tracks")
-		}
-
+	// check if a user is already authenticated
+	if _, err := utils.TestAndSetToken(); err == nil {
+		fmt.Println("Use `morag help fetch` to learn more about how to get tracks")
 	} else {
 		// Spawn a server to initiate the OAuth2 authentication process
 

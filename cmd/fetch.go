@@ -2,7 +2,11 @@ package cmd
 
 import (
 	"fmt"
+	"io/ioutil"
+	"log"
+	"net/http"
 
+	"github.com/shashankgroovy/morag/utils"
 	"github.com/spf13/cobra"
 )
 
@@ -34,9 +38,31 @@ func init() {
 
 func fetch(cmd *cobra.Command, args []string) {
 	if len(args) < 1 {
-		fmt.Printf("ERROR: Please provide a Spotify artistID.\nSee the help text below.\n\n")
+		// Print error, help text and exit
+		fmt.Printf("\nERROR: Please provide a Spotify artistID.\n\n")
 		cmd.Help()
+	} else {
+		artistID := args[0]
 
+		// check if a user is already authenticated
+		if authToken, err := utils.TestAndSetToken(); err != nil {
+			log.Println("Error while setting the auth token", err.Error())
+		} else {
+			client := &http.Client{}
+
+			spotifyURL := fmt.Sprintf("https://api.spotify.com/v1/artists/%s/albums", artistID)
+			req, _ := http.NewRequest("GET", spotifyURL, nil)
+			req.Header.Add("Authorization", "Bearer "+authToken.AccessToken)
+
+			response, err := client.Do(req)
+			// check if everything's ok
+			body, _ := ioutil.ReadAll(response.Body)
+			if err != nil || response.StatusCode != http.StatusOK {
+				log.Println("Unable to fetch new access token", err.Error(), string(body))
+			}
+			fmt.Println("Fetching albums for artist")
+			fmt.Println(string(body))
+			defer response.Body.Close()
+		}
 	}
-	fmt.Println("fetch called. ", args)
 }

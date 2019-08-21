@@ -75,7 +75,7 @@ func authCallbackHandler(srvChan chan<- bool) func(w http.ResponseWriter, r *htt
 		// Parse the request body into the `OAuthToken` struct
 		var authToken utils.OAuthToken
 
-		if err := authToken.SaveTokenToFile(response); err != nil {
+		if err := authToken.SaveTokenToFile(response, false); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 		}
 

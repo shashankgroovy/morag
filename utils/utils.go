@@ -2,6 +2,7 @@ package utils
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -34,10 +35,15 @@ func (token *OAuthToken) ValidateAccessToken() error {
 
 	response, err := client.Do(req)
 	// check if everything's ok
-	if err != nil || response.StatusCode != http.StatusOK {
-		body, _ := ioutil.ReadAll(response.Body)
-		log.Println("Unable to fetch new access token", err.Error(), string(body))
+	if err != nil {
+		log.Println("Error while validating token", err.Error())
 		return err
+	}
+
+	if response.StatusCode != http.StatusOK {
+		body, _ := ioutil.ReadAll(response.Body)
+		fmt.Println("Access token expired")
+		return errors.New(string(body))
 	}
 	defer response.Body.Close()
 
@@ -53,22 +59,17 @@ func (token *OAuthToken) GetNewAccessToken() error {
 		"grant_type":    {"refresh_token"},
 		"refresh_token": {token.RefreshToken},
 	}
-	// send a post form request
+	// create a post form request
 	req, _ := http.NewRequest("POST", spotifyURL, strings.NewReader(formData.Encode()))
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 	req.SetBasicAuth(clientId, clientSecret)
 
-	// Base64 encode client id and client secret for basic auth
-	// clientCredString := fmt.Sprintf("%s:%s", clientId, clientSecret)
-	// encodedClientCred := base64.StdEncoding.EncodeToString([]byte(clientCredString))
-	// req.Header.Add("Authorization", "Basic "+encodedClientCred)
-
+	// fire away
 	response, _ := client.Do(req)
-	body, _ := ioutil.ReadAll(response.Body)
-	defer response.Body.Close()
 
-	if response.StatusCode != http.StatusOK {
-		log.Println("Unable to fetch new access token", string(body))
+	// Persist the new token from http response
+	if err := token.SaveTokenToFile(response, true); err != nil {
+		fmt.Println(err.Error())
 	}
 
 	return nil
@@ -76,12 +77,40 @@ func (token *OAuthToken) GetNewAccessToken() error {
 
 // SaveTokenToFile retrieves access-token and refresh-token from http.Response
 // and persists them to TOKEN_FILE
-func (token *OAuthToken) SaveTokenToFile(r *http.Response) error {
+func (token *OAuthToken) SaveTokenToFile(r *http.Response, refreshed bool) error {
 
-	// Parse the request body into the `OAuthToken` struct
-	if err := json.NewDecoder(r.Body).Decode(token); err != nil {
-		log.Println("Could not parse JSON response. ", err.Error())
-		return err
+	fmt.Println("Fetching a new access token")
+
+	if !refreshed {
+		// Parse the request body into the `OAuthToken` struct
+		// This works with brand new tokens.
+		err := json.NewDecoder(r.Body).Decode(token)
+		if err != nil {
+			log.Println("Could not parse JSON response. ", err.Error())
+			return err
+		}
+	} else {
+		// While fetching a new access token using refresh token, the refresh token
+		// is sometimes not part of the response. And hence we'll use a
+		// interface{} to get those values
+		var result map[string]interface{}
+
+		if r.StatusCode != http.StatusOK {
+			log.Println("Unable to fetch new access token")
+			return errors.New("Unable to get new access token")
+		}
+
+		err := json.NewDecoder(r.Body).Decode(&result)
+		if err != nil {
+			log.Println("Could not parse JSON response. ", err.Error())
+			return err
+
+		}
+		// Replace the access token in token with the new one
+		accessToken, ok := result["access_token"].(string)
+		if ok {
+			token.AccessToken = accessToken
+		}
 	}
 
 	// JSONify the authToken
@@ -99,6 +128,46 @@ func (token *OAuthToken) SaveTokenToFile(r *http.Response) error {
 	}
 
 	return nil
+}
+
+// TestAndSetToken returns an OAuthToken if it can be retrieved from TOKEN_FILE
+func TestAndSetToken() (OAuthToken, error) {
+	// Initialize the authToken
+	var authToken OAuthToken
+
+	tokenFile := os.Getenv("TOKEN_FILE")
+
+	// Check if file exists
+	if _, err := os.Stat(tokenFile); err == nil {
+		// Token file exists
+		Banner()
+
+		// Validate if the file has valid json
+		authJson, err := ioutil.ReadFile(tokenFile)
+		if err != nil {
+			return authToken, err
+			log.Println("Bad json in token file", err.Error())
+			log.Println("Use the login command to authenticate again")
+		}
+
+		// we unmarshal our byteArray which contains our
+		// jsonFile's content into 'users' which we defined above
+		json.Unmarshal(authJson, &authToken)
+
+		// Check if access token has expired
+		err = authToken.ValidateAccessToken()
+		if err != nil {
+			// Get a new access token
+			if err = authToken.GetNewAccessToken(); err == nil {
+				fmt.Println("Successfully authenticated!")
+			}
+		} else {
+			fmt.Println("You are authenticated!")
+		}
+		return authToken, nil
+	} else {
+		return authToken, err
+	}
 }
 
 // OpenInBrowser opens a given url in the default browser based on each platform
