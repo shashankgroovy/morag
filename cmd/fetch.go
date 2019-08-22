@@ -1,11 +1,13 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
 
+	"github.com/mitchellh/mapstructure"
 	"github.com/shashankgroovy/morag/utils"
 	"github.com/spf13/cobra"
 )
@@ -43,26 +45,80 @@ func fetch(cmd *cobra.Command, args []string) {
 		cmd.Help()
 	} else {
 		artistID := args[0]
+		var MAX_LIMIT = 50
 
 		// check if a user is already authenticated
 		if authToken, err := utils.TestAndSetToken(); err != nil {
 			log.Println("Error while setting the auth token", err.Error())
 		} else {
-			client := &http.Client{}
+			// Create an empty interface to hold all albums
+			album_ch := make(chan string)
+			//track_ch := make(chan string)
 
-			spotifyURL := fmt.Sprintf("https://api.spotify.com/v1/artists/%s/albums", artistID)
-			req, _ := http.NewRequest("GET", spotifyURL, nil)
-			req.Header.Add("Authorization", "Bearer "+authToken.AccessToken)
+			go getAlbums(authToken, artistID, album_ch, 0, MAX_LIMIT)
 
-			response, err := client.Do(req)
-			// check if everything's ok
-			body, _ := ioutil.ReadAll(response.Body)
-			if err != nil || response.StatusCode != http.StatusOK {
-				log.Println("Unable to fetch new access token", err.Error(), string(body))
+			for albumId := range album_ch {
+				go getAlbumTracks(albumId)
 			}
-			fmt.Println("Fetching albums for artist")
-			fmt.Println(string(body))
-			defer response.Body.Close()
+			close(album_ch)
+			fmt.Println("Reached here")
 		}
 	}
+}
+
+// getAlbums returns the result of getting an album
+func getAlbums(authToken utils.OAuthToken, artistID string, album_ch chan<- string, offset, limit int) {
+	var (
+		albums []interface{}
+		result map[string]interface{}
+	)
+
+	// Create a new http client
+	client := &http.Client{}
+
+	// Construct the http request
+	spotifyURL := fmt.Sprintf("https://api.spotify.com/v1/artists/%s/albums", artistID)
+	req, _ := http.NewRequest("GET", spotifyURL, nil)
+	req.Header.Add("Authorization", "Bearer "+authToken.AccessToken)
+
+	// Add the pagination query parameters
+	q := req.URL.Query()
+	q.Add("offset", string(fmt.Sprintf("%d", offset)))
+	q.Add("limit", string(fmt.Sprintf("%d", limit)))
+	req.URL.RawQuery = q.Encode()
+
+	fmt.Println(req.URL.String())
+
+	// Fire it away
+	fmt.Println("Fetching albums of artist")
+	resp, err := client.Do(req)
+
+	// check if everything's ok
+	if err != nil {
+		log.Println("Error in request", err.Error())
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := ioutil.ReadAll(resp.Body)
+		fmt.Println("404 ", resp.StatusCode, string(body))
+	}
+	defer resp.Body.Close()
+
+	err = json.NewDecoder(resp.Body).Decode(&result)
+	if err != nil {
+		log.Println("Could not parse JSON response. ", err.Error())
+
+	}
+	// Store all albums from request
+	albums = result["items"].([]interface{})
+	for _, value := range albums {
+		var album utils.Album
+		mapstructure.Decode(value, &album)
+		album_ch <- album.Id
+	}
+}
+
+// getAlbumTracks fetches all the tracks of an album
+func getAlbumTracks(albumId string) {
+	fmt.Println(albumId)
 }

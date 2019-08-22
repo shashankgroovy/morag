@@ -114,7 +114,7 @@ func (token *OAuthToken) SaveTokenToFile(r *http.Response, refreshed bool) error
 	}
 
 	// JSONify the authToken
-	file, err := json.Marshal(token)
+	file, err := json.MarshalIndent(token, "", "  ")
 	if err != nil {
 		log.Println("Unable to parse JSON", err.Error())
 		return err
@@ -145,9 +145,9 @@ func TestAndSetToken() (OAuthToken, error) {
 		// Validate if the file has valid json
 		authJson, err := ioutil.ReadFile(tokenFile)
 		if err != nil {
-			return authToken, err
 			log.Println("Bad json in token file", err.Error())
 			log.Println("Use the login command to authenticate again")
+			return authToken, err
 		}
 
 		// we unmarshal our byteArray which contains our
