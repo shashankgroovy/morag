@@ -5,6 +5,7 @@
 # Project files
 morag
 .morag_token.json
+output.csv
 
 # Go Binaries for programs and plugins
 *.o

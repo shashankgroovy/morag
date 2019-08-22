@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -58,8 +57,13 @@ func fetch(cmd *cobra.Command, args []string) {
 		if authToken, err := utils.TestAndSetToken(); err != nil {
 			log.Println("Error while setting the auth token", err.Error())
 		} else {
+
+			// create some channels for data exchange
 			albumCh := make(chan string)
 			trackCh := make(chan string)
+			// retry channel to stop creating more goroutines as soon as a rate limit is hit
+			retryCh := make(chan time.Duration)
+
 			var songlist []utils.FullSoundtrack
 			var mu sync.Mutex
 
@@ -71,20 +75,40 @@ func fetch(cmd *cobra.Command, args []string) {
 			albumNum := 0
 
 			for albumId := range albumCh {
+				select {
+				case sleep := <-retryCh:
+					// Pause go routine creation untill cooldown
+					time.Sleep(sleep * time.Millisecond)
+				default:
+					// do nothing
+				}
 				wg.Add(1)
 				albumNum += 1
-				color.Yellow("[NUM]" + string(fmt.Sprintf("%d", albumNum)))
-				go getAlbumTracks(authToken, albumId, trackCh, &wg)
+				color.Yellow("[albumNum]" + string(fmt.Sprintf("%d", albumNum)))
+				go getAlbumTracks(authToken, albumId, trackCh, retryCh, &wg)
 			}
 
+			trackNum := 0
 			for trackId := range trackCh {
+				select {
+				case sleep := <-retryCh:
+					// Pause go routine creation untill cooldown
+					// Time to write things to csv
+					WritetoCSV(songlist)
+
+					time.Sleep(sleep * time.Millisecond)
+				default:
+					// do nothing
+				}
+				trackNum += 1
+				color.Yellow("[trackNum]" + string(fmt.Sprintf("%d", trackNum)))
 				wg.Add(1)
-				go getFullSoundTrack(authToken, trackId, &songlist, &wg, &mu)
+				go getFullSoundTrack(authToken, trackId, &songlist, retryCh, &wg, &mu)
 			}
 
 			wg.Wait()
 
-			WritetoCSV(&songlist)
+			WritetoCSV(songlist)
 
 			fmt.Println("Finished")
 			fmt.Println("Output stored at - ", os.Getenv("OUTPUT_FILE"))
@@ -104,6 +128,8 @@ func getAlbums(authToken utils.OAuthToken, artistID string, albumCh chan<- strin
 
 	// Create a new http client
 	client := &http.Client{}
+	// a basic flag to safe guard process execution. It's helpful when rate limit is hit
+	proceed := true
 
 	// Construct the http request
 	spotifyURL := fmt.Sprintf("https://api.spotify.com/v1/artists/%s/albums", artistID)
@@ -116,10 +142,9 @@ func getAlbums(authToken utils.OAuthToken, artistID string, albumCh chan<- strin
 	q.Add("limit", string(fmt.Sprintf("%d", limit)))
 	req.URL.RawQuery = q.Encode()
 
-	fmt.Println(req.URL.String())
-
 	// Fire it away
 	color.Yellow("[getAlbums] Fetching albums of artist")
+	fmt.Println(req.URL.String())
 	resp, err := client.Do(req)
 
 	// check if everything's ok
@@ -128,7 +153,8 @@ func getAlbums(authToken utils.OAuthToken, artistID string, albumCh chan<- strin
 	}
 
 	if resp.StatusCode == http.StatusTooManyRequests {
-		log.Println("got 429", resp.StatusCode, resp.Header.Get("Retry-After"))
+		proceed = false
+		log.Println("[getAlbums] 429", resp.StatusCode, resp.Header.Get("Retry-After"))
 		retryAfter, _ := strconv.Atoi(resp.Header.Get("Retry-After"))
 
 		// Start the retry mechanism
@@ -138,11 +164,14 @@ func getAlbums(authToken utils.OAuthToken, artistID string, albumCh chan<- strin
 		//Execute this request again
 		for retry.Attempt < retry.Max {
 			retry.Attempt += 1
-			time.Sleep(retry.Duration)
-			color.Yellow("sleeping.......................................")
+			time.Sleep(retry.Duration * time.Second)
 
 			// fire the request
 			resp, err = client.Do(req)
+			if resp.StatusCode != http.StatusTooManyRequests {
+				proceed = true
+				break
+			}
 		}
 	} else if resp.StatusCode != http.StatusOK {
 		body, _ := ioutil.ReadAll(resp.Body)
@@ -150,22 +179,24 @@ func getAlbums(authToken utils.OAuthToken, artistID string, albumCh chan<- strin
 	}
 	defer resp.Body.Close()
 
-	err = json.NewDecoder(resp.Body).Decode(&result)
-	if err != nil {
-		log.Println("Could not parse JSON response. ", err.Error())
+	if proceed {
+		err = json.NewDecoder(resp.Body).Decode(&result)
+		if err != nil {
+			log.Println("Could not parse JSON response. ", err.Error())
 
-	}
-	// Store all albums from request
-	albums = result["items"].([]interface{})
-	for _, value := range albums {
-		var album utils.SimplifiedAlbum
-		mapstructure.Decode(value, &album)
-		albumCh <- album.Id
+		}
+		// Store all albums from request
+		albums = result["items"].([]interface{})
+		for _, value := range albums {
+			var album utils.SimplifiedAlbum
+			mapstructure.Decode(value, &album)
+			albumCh <- album.Id
+		}
 	}
 }
 
 // getAlbumTracks fetches all the tracks of an album
-func getAlbumTracks(authToken utils.OAuthToken, albumId string, trackCh chan<- string, wg *sync.WaitGroup) {
+func getAlbumTracks(authToken utils.OAuthToken, albumId string, trackCh chan<- string, retryCh chan<- time.Duration, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	var (
@@ -179,6 +210,9 @@ func getAlbumTracks(authToken utils.OAuthToken, albumId string, trackCh chan<- s
 	// Create a new http client
 	client := &http.Client{}
 
+	// a basic flag to safe guard process execution. It's helpful when rate limit is hit
+	proceed := true
+
 	// Construct the http request
 	spotifyURL := fmt.Sprintf("https://api.spotify.com/v1/albums/%s/tracks", albumId)
 	req, _ := http.NewRequest("GET", spotifyURL, nil)
@@ -190,11 +224,9 @@ func getAlbumTracks(authToken utils.OAuthToken, albumId string, trackCh chan<- s
 	q.Add("limit", string(fmt.Sprintf("%d", MAX_LIMIT)))
 	req.URL.RawQuery = q.Encode()
 
-	fmt.Println(req.URL.String())
-
 	// Fire it away
 	color.Cyan("\n[getAlbumTracks] Getting tracks for")
-	fmt.Println(albumId)
+	fmt.Println(req.URL.String())
 	resp, err := client.Do(req)
 
 	// check if everything's ok
@@ -203,20 +235,26 @@ func getAlbumTracks(authToken utils.OAuthToken, albumId string, trackCh chan<- s
 	}
 
 	if resp.StatusCode == http.StatusTooManyRequests {
-		log.Println("got 429", resp.StatusCode, resp.Header.Get("Retry-After"))
+		proceed = false
+		log.Println("[getAlbumTracks] 429", resp.StatusCode, resp.Header.Get("Retry-After"))
 		retryAfter, _ := strconv.Atoi(resp.Header.Get("Retry-After"))
 
 		// Start the retry mechanism
 		retry := utils.RetryRequest{Attempt: 1, Min: 1, Max: 5}
 		retry.Backoff(retryAfter)
+		retryCh <- retry.Duration
 
 		//Execute this request again
 		for retry.Attempt < retry.Max {
 			retry.Attempt += 1
-			time.Sleep(retry.Duration)
+			time.Sleep(retry.Duration * time.Second)
 
 			// fire the request
 			resp, err = client.Do(req)
+			if resp.StatusCode != http.StatusTooManyRequests {
+				proceed = true
+				break
+			}
 		}
 	} else if resp.StatusCode != http.StatusOK {
 		body, _ := ioutil.ReadAll(resp.Body)
@@ -224,26 +262,32 @@ func getAlbumTracks(authToken utils.OAuthToken, albumId string, trackCh chan<- s
 	}
 	defer resp.Body.Close()
 
-	err = json.NewDecoder(resp.Body).Decode(&result)
-	if err != nil {
-		log.Println("Could not parse JSON response. ", err.Error())
+	if proceed {
+		err = json.NewDecoder(resp.Body).Decode(&result)
+		if err != nil {
+			log.Println("Could not parse JSON response. ", err.Error())
 
-	}
-	// Store all tracks from request
-	tracks = result["items"].([]interface{})
-	for _, value := range tracks {
-		var soundtrack utils.SimplifiedSoundtrack
-		mapstructure.Decode(value, &soundtrack)
-		trackCh <- soundtrack.Id
+		}
+		// Store all tracks from request
+		tracks = result["items"].([]interface{})
+		for _, value := range tracks {
+			var soundtrack utils.SimplifiedSoundtrack
+			mapstructure.Decode(value, &soundtrack)
+			trackCh <- soundtrack.Id
+		}
+
 	}
 }
 
 // getFullSoundTrack retrieves a list of full soundtracks
-func getFullSoundTrack(authToken utils.OAuthToken, trackId string, songlist *[]utils.FullSoundtrack, wg *sync.WaitGroup, mu *sync.Mutex) {
+func getFullSoundTrack(authToken utils.OAuthToken, trackId string, songlist *[]utils.FullSoundtrack, retryCh chan<- time.Duration, wg *sync.WaitGroup, mu *sync.Mutex) {
 	var soundtrack utils.FullSoundtrack
 
 	// Create a new http client
 	client := &http.Client{}
+
+	// a basic flag to safe guard process execution. It's helpful when rate limit is hit
+	proceed := true
 
 	// Construct the http request
 	spotifyURL := fmt.Sprintf("https://api.spotify.com/v1/tracks/%s", trackId)
@@ -255,10 +299,9 @@ func getFullSoundTrack(authToken utils.OAuthToken, trackId string, songlist *[]u
 	//q.Add("ids", string(fmt.Sprintf("%s", trackList)))
 	req.URL.RawQuery = q.Encode()
 
-	fmt.Println(req.URL.String())
-
 	// Fire it away
 	color.Red("Fetching soundtrack")
+	fmt.Println(req.URL.String())
 	resp, err := client.Do(req)
 
 	// check if everything's ok
@@ -267,20 +310,26 @@ func getFullSoundTrack(authToken utils.OAuthToken, trackId string, songlist *[]u
 	}
 
 	if resp.StatusCode == http.StatusTooManyRequests {
-		log.Println("got 429", resp.StatusCode, resp.Header.Get("Retry-After"))
+		proceed = false
+		log.Println("[getFullSoundTrack] 429", resp.StatusCode, resp.Header.Get("Retry-After"))
 		retryAfter, _ := strconv.Atoi(resp.Header.Get("Retry-After"))
 
 		// Start the retry mechanism
 		retry := utils.RetryRequest{Attempt: 1, Min: 1, Max: 5}
 		retry.Backoff(retryAfter)
+		retryCh <- retry.Duration
 
 		//Execute this request again
 		for retry.Attempt < retry.Max {
 			retry.Attempt += 1
-			time.Sleep(retry.Duration)
+			time.Sleep(retry.Duration * time.Second)
 
 			// fire the request
 			resp, err = client.Do(req)
+			if resp.StatusCode != http.StatusTooManyRequests {
+				proceed = true
+				break
+			}
 		}
 	} else if resp.StatusCode != http.StatusOK {
 		body, _ := ioutil.ReadAll(resp.Body)
@@ -288,25 +337,38 @@ func getFullSoundTrack(authToken utils.OAuthToken, trackId string, songlist *[]u
 	}
 	defer resp.Body.Close()
 
-	err = json.NewDecoder(resp.Body).Decode(&soundtrack)
-	if err != nil {
-		log.Println("Could not parse JSON response. ", err.Error())
+	if proceed {
+		err = json.NewDecoder(resp.Body).Decode(&soundtrack)
+		if err != nil {
+			log.Println("Could not parse JSON response. ", err.Error())
 
+		}
+		mu.Lock()
+		*songlist = append(*songlist, soundtrack)
+		mu.Unlock()
 	}
-	mu.Lock()
-	*songlist = append(*songlist, soundtrack)
-	mu.Unlock()
 }
 
 // Writes a song to CSV
-func WritetoCSV(songlist *[]utils.FullSoundtrack) {
+func WritetoCSV(songlist []utils.FullSoundtrack) {
 
-	buff := &bytes.Buffer{}
-	w := struct2csv.NewWriter(buff)
-	err := w.WriteStructs(songlist)
+	log.Println("[WRITER] Writing to file")
+
+	file, err := os.OpenFile(os.Getenv("OUTPUT_FILE"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+
+	if err != nil {
+		log.Fatal("[WRITER] Cannot create file", err)
+	}
+	defer file.Close()
+
+	w := struct2csv.NewWriter(file)
+	w.SetComma('\t')
+	w.SetSeparators("|", "|")
+
+	err = w.WriteStructs(songlist)
 	if err != nil {
 		// handle error
-		log.Println("Error", err.Error())
+		log.Println("[WRITER] Error", err.Error())
 	}
 
 }

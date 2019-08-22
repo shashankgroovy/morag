@@ -7,7 +7,6 @@ import (
 
 // AlbumItems to hold an array of Album
 type SimplifiedAlbum struct {
-	AlbumGroup           string             `json:"album_group"`
 	AlbumType            string             `json:"album_type"`
 	Artists              []SimplifiedArtist `json:"artists"`
 	AvailableMarkets     []string           `json:"available_markets"`
