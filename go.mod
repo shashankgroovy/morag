@@ -18,8 +18,10 @@ require (
 	github.com/mattn/go-isatty v0.0.9 // indirect
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/mitchellh/mapstructure v1.1.2
+	github.com/mohae/struct2csv v0.0.0-20151122200941-e72239694eae
 	github.com/shashankgroovy/enigma v0.0.0-20190805172631-0559a69b9ef8 // indirect
 	github.com/spf13/cobra v0.0.5
 	github.com/spf13/viper v1.4.0
 	github.com/thedevsaddam/renderer v1.2.0
+	github.com/tidwall/pretty v1.0.0 // indirect
 )
